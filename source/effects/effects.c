@@ -172,7 +172,11 @@ symbols in this file:
 #include "tag_files/tag_groups.h"
 #include "units/bipeds.h"
 #include "units/units.h"
+#include "gun_race.h" /* port: port/linux/game/gun_race.c */
 #undef real_local_random
+
+/* port: the effect whose parts are being built, for Gun Race Pro */
+static long gun_race_generating_effect = NONE;
 
 /* ---------- constants */
 
@@ -1550,6 +1554,8 @@ static long effect_allocate(
 		}
 	}
 
+	/* port: Gun Race Pro remembers which projectile created this effect */
+	gun_race_bind_effect(effect_index);
 	return effect_index;
 }
 
@@ -1756,7 +1762,10 @@ static void effect_generate_part(
 			damage.epicenter = *world_point;
 			damage.direction = *world_forward;
 
+			/* port: Gun Race Pro attributes this explosion to the projectile */
+			gun_race_begin_projectile(gun_race_effect_projectile(gun_race_generating_effect));
 			area_of_effect_cause_damage(&damage, NONE);
+			gun_race_end_damage();
 			break;
 		}
 
@@ -2460,7 +2469,15 @@ static void effect_update(
 			}
 
 			if (!TEST_FLAG(effect->header.flags, _effect_invisible_bit))
+			{
+				long saved_effect;
+
+				/* port: Gun Race Pro reads the effect index while a part deals damage */
+				saved_effect = gun_race_generating_effect;
+				gun_race_generating_effect = effect_index;
 				effect_generate_parts(effect);
+				gun_race_generating_effect = saved_effect;
+			}
 		}
 	}
 

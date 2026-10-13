@@ -85,6 +85,7 @@ symbols in this file:
 #include "text/text_group.h"
 #include "text/unicode.h"
 #include "units/units.h"
+#include "gun_race.h" /* port: port/linux/game/gun_race.c */
 
 /* ---------- constants */
 
@@ -158,6 +159,9 @@ static void slayer_engine_dispose(
 static boolean slayer_engine_initialize_for_new_map(
 	void)
 {
+	/* port: Gun Race Pro builds its ladder before Slayer clears the scores */
+	gun_race_on_new_map();
+
 	csmemset(slayer_globals.team_score, 0, sizeof(slayer_globals.team_score));
 	csmemset(slayer_globals.individual_score, 0, sizeof(slayer_globals.individual_score));
 
@@ -233,6 +237,8 @@ static void slayer_engine_player_added(
 	long slot = DATUM_INDEX_TO_ABSOLUTE_INDEX(player_index);
 
 	player->multiplayer_special = NONE;
+	/* port: Gun Race Pro starts this player at the first stage */
+	gun_race_on_player_added(player_index);
 	/* port: a player joining the game in progress can take the slot of one
 	who quit (network_game_spawn_player): not that player's score, nor in
 	free for all, where the slot is the team, the team's */
@@ -258,6 +264,10 @@ static boolean slayer_engine_allow_pick_up(
 	long unit_index,
 	long weapon_index)
 {
+	/* port: Gun Race Pro removes the map's weapons, so this stays open.
+	   Closing it also stopped a carried weapon from being put in the hands. */
+	(void)unit_index;
+	(void)weapon_index;
 	return TRUE;
 }
 
@@ -293,6 +303,17 @@ static wchar_t *slayer_get_score_string(
 	long player_index,
 	wchar_t *buffer)
 {
+	/* port: Gun Race Pro shows the weapon and the kills still needed */
+	if (gun_race_show_scoreboard())
+	{
+		gun_race_format_progress(
+			player_index,
+			slayer_globals.individual_score[DATUM_INDEX_TO_ABSOLUTE_INDEX(player_index)],
+			buffer,
+			48);
+		return buffer;
+	}
+
 	usprintf(
 		buffer,
 		L"%d",
@@ -307,6 +328,12 @@ static wchar_t *slayer_get_score_header_string(
 {
 	long string_list_index;
 
+	/* port: Gun Race Pro. The map's score name is "Score" or "Flag". */
+	if (gun_race_show_scoreboard())
+	{
+		ustrncpy_terminated(buffer, L"Stage", 256);
+		return buffer;
+	}
 	/* port: bounded (a map's text, into its callers' score_string[256]) */
 	ustrncpy_terminated(buffer, GET_MULTIPLAYER_GAME_TEXT(_string_score), 256);
 
@@ -473,6 +500,28 @@ static void slayer_engine_player_killed_player(
 {
 	struct player_datum *dead_player = player_get(dead_player_index);
 
+	/* port: Gun Race Pro counts only a kill with the current stage's weapon */
+	if (gun_race_active())
+	{
+		int result;
+
+		if (dead_player->quit_out_of_game || killing_player_index == NONE ||
+			network_game_distributed_client() || friendly_fire ||
+			killing_player_index == dead_player_index)
+		{
+			return;
+		}
+		result = gun_race_handle_kill(killing_player_index, dead_player_index);
+		if (result == GR_KILL_COUNTED || result == GR_STAGE_ADVANCED ||
+			result == GR_MATCH_WON)
+		{
+			slayer_engine_adjust_score(killing_player_index, 1);
+			if (result == GR_MATCH_WON)
+				game_engine_end_game();
+		}
+		return;
+	}
+
 	/* (a client of the distributed netcode has the host's scores,
 	game_engine_slayer_read_network_state: its copy of a kill may come before
 	or after the state with it, and would count twice) */
@@ -517,6 +566,18 @@ static boolean slayer_engine_display_score(
 
 	player_get(player_index);
 	target_player = NULL;
+
+	/* port: Gun Race Pro replaces the score line with the stage */
+	if (gun_race_show_scoreboard() &&
+		(message == _slayer_message_new_target || message == _game_engine_message_show_score))
+	{
+		gun_race_format_progress(
+			player_index,
+			slayer_get_score(player_index, _get_score_individual),
+			buffer,
+			buffer_character_count);
+		return TRUE;
+	}
 
 	if (message == _slayer_message_new_target)
 	{
@@ -595,6 +656,10 @@ static void slayer_player_update(
 	long index)
 {
 	struct player_datum *player = player_get(index);
+
+	/* port: Gun Race Pro keeps the stage weapon in hand and grenades empty */
+	gun_race_observe_score(index, slayer_get_score(index, _get_score_individual));
+	gun_race_enforce_player(index);
 
 	if (game_engine_get_variant()->game_engine_variant.slayer.no_kill_penalty &&
 		player->speed_multiplier > 1.0f)

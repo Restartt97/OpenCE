@@ -56,6 +56,7 @@ being hit looks and feels like on the clients).
 #include "scenario/scenario.h"
 #include "units/units.h"
 #include "network_distributed.h"
+#include "gun_race.h"
 
 #include <math.h>
 
@@ -1746,7 +1747,8 @@ target. */
 static boolean distributed_report_valid(
 	long machine_index,
 	struct distributed_hit_report const *report,
-	struct damage_data *damage)
+	struct damage_data *damage,
+	boolean *is_melee)
 {
 	short player_index = report->damage.owner_player_index;
 	long now = game_time_get();
@@ -1765,6 +1767,9 @@ static boolean distributed_report_valid(
 	short seen;
 	short grenade_type;
 	short throw_index = NONE;
+
+	if (is_melee)
+		*is_melee = FALSE;
 
 	/* that machine's player */
 	if (player_index == NO_PLAYER || player_index >= MAXIMUM_TRACKED_PLAYERS ||
@@ -1948,6 +1953,8 @@ static boolean distributed_report_valid(
 	unit_index = distributed_living_unit(player);
 	if (!distributed_object_is_players(player_index, unit_index, damage->owner_object_index))
 		damage->owner_object_index = unit_index;
+	if (is_melee)
+		*is_melee = melee;
 	return TRUE;
 }
 
@@ -1963,16 +1970,31 @@ void network_damage_handle_reports(
 	{
 		struct distributed_hit_report const *report = &reports[index];
 		struct damage_data damage;
+		boolean melee;
+		int gun_race_hit;
 
-		if (!distributed_report_valid(machine_index, report, &damage))
+		melee = FALSE;
+		gun_race_hit = 0;
+		if (!distributed_report_valid(machine_index, report, &damage, &melee))
 		{
 			damage_rejected_reports++;
 			continue;
 		}
 		damage_dealt_reports++;
+		/* port: Gun Race Pro. A client's hit is not this machine's projectile,
+		   so the weapon is taken from the damage it dealt. Skull melee kills. */
+		if (melee && gun_race_reported_melee_should_kill(damage.owner_player_index))
+		{
+			damage.scale = 1.0f;
+			damage.multiplier = 100.0f;
+		}
+		gun_race_hit = gun_race_begin_reported_hit(
+			damage.owner_player_index, damage.definition_index, melee);
 		damage_dealing_report = TRUE;
 		object_cause_damage(&damage, report->object_index, report->node_index, report->region_index,
 			report->material_index, report->has_normal ? &report->object_normal : NULL);
+		if (gun_race_hit)
+			gun_race_end_damage();
 		damage_dealing_report = FALSE;
 	}
 }

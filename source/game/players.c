@@ -237,6 +237,7 @@ symbols in this file:
 #include "data.h"
 #include "devices/devices.h"
 #include "network_coop.h" /* port: port/linux/game/network_coop.c */
+#include "gun_race.h" /* port: port/linux/game/gun_race.c */
 #include "cutscene/cinematics.h" /* port: network co-op's first spawns */
 #include "editor/editor_stubs.h"
 #include "effects/effects.h"
@@ -4231,7 +4232,8 @@ static void player_examine_nearby_item(
 		equipment_definition = equipment_definition_get(equipment->definition_index);
 		if (equipment_definition->equipment.powerup_type == _equipment_powerup_grenade)
 		{
-			if (players_decide_pickups() && unit_add_grenade_to_inventory(player->unit_index, item_index))
+			/* port: Gun Race Pro never picks up grenades */
+			if (!gun_race_forbids_grenades() && players_decide_pickups() && unit_add_grenade_to_inventory(player->unit_index, item_index))
 			{
 				hud_picked_up_grenade(
 					player->local_player_index,
@@ -4889,7 +4891,9 @@ void players_update_before_game(
 					weapon_index = unit_inventory_get_weapon(
 						player->unit_index,
 						unit_get(player->unit_index)->unit.current_weapon_index);
-					if (weapon_index != NONE && weapon_must_be_readied(weapon_index))
+					/* port: Gun Race Pro holds the skull. Firing must not drop it. */
+					if (weapon_index != NONE && weapon_must_be_readied(weapon_index) &&
+						!gun_race_active())
 					{
 						if (TEST_FLAG(action->control_flags, _unit_control_weapon_primary_trigger_bit) ||
 							TEST_FLAG(action->control_flags, _unit_control_weapon_secondary_trigger_bit))

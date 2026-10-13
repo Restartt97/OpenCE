@@ -665,6 +665,7 @@ symbols in this file:
 #include "game/game_allegiance.h"
 #include "game/game_globals.h"
 #include "game/game_engine.h"
+#include "gun_race.h" /* port: port/linux/game/gun_race.c */
 #include "game/players.h"
 #include "hs/object_lists.h"
 #include "interface/first_person_weapons.h"
@@ -2828,6 +2829,29 @@ void unit_died(
 	}
 
 	unit->unit.speech.queued.priority = 0;
+	/* port: Gun Race Pro. A dead player's weapon is deleted, not dropped. */
+	if (gun_race_active())
+	{
+		int weapon_slot;
+
+		for (weapon_slot = 0; weapon_slot < MAXIMUM_WEAPONS_PER_UNIT; weapon_slot++)
+		{
+			long carried = unit->unit.weapon_object_indices[weapon_slot];
+
+			unit->unit.weapon_object_indices[weapon_slot] = NONE;
+			if (carried != NONE &&
+				!(object_get(carried)->object.type == _object_type_weapon &&
+					weapon_is_flag(carried)))
+			{
+				if (object_get(carried)->object.parent_object_index != NONE)
+					object_detach(carried);
+				object_delete(carried);
+			}
+		}
+		unit->unit.current_weapon_index = NONE;
+		unit->unit.desired_weapon_index = NONE;
+		unit->unit.weapon_drop_delay_ticks = 0;
+	}
 	unit_drop_inventory_weapons(unit_index);
 	fresh_unit = unit_get(unit_index);
 	if (fresh_unit->unit.equipment_object_index != NONE)
@@ -9259,6 +9283,14 @@ void unit_cause_player_melee_damage(
 
 				if (object_get(best_object_index)->object.type==_object_type_biped)
 				{
+					/* port: Gun Race Pro. An unarmed punch kills a player
+					   in one hit, and the blow is the kill's weapon. */
+					if (gun_race_melee_should_kill(unit_index))
+					{
+						damage_data.scale = 1.f;
+						damage_data.multiplier = 100.f;
+					}
+					gun_race_begin_melee();
 					object_cause_damage(
 						&damage_data,
 						best_object_index,
@@ -9266,6 +9298,7 @@ void unit_cause_player_melee_damage(
 						NONE,
 						NONE,
 						NULL);
+					gun_race_end_damage();
 				}
 			}
 		}

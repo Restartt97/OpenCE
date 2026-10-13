@@ -285,6 +285,111 @@ word playlist_profile_number_of_default_profiles_on_disk(
 	return playlist_profile_globals.number_of_default_profiles;
 }
 
+/* port: Gun Race Pro is a saved gametype, like one made in the menu */
+static int playlist_profile_name_is_gun_race(wchar_t const *name)
+{
+	static wchar_t const expected[] = { 'G', 'u', 'n', ' ', 'R', 'a', 'c', 'e', 0 };
+	int index;
+
+	if (!name)
+		return 0;
+	for (index = 0; expected[index] != 0; index++)
+	{
+		if (name[index] != expected[index])
+			return 0;
+	}
+	return name[index] == 0;
+}
+
+static long playlist_profile_create_gun_race(short local_player_index)
+{
+	struct game_variant temporary;
+	struct file_reference file;
+	wchar_t name[MAXIMUM_GAME_VARIANT_NAME_LENGTH];
+	long playlist_profile_index;
+
+	csmemset(name, 0, sizeof(name));
+	name[0] = 'G';
+	name[1] = 'u';
+	name[2] = 'n';
+	name[3] = ' ';
+	name[4] = 'R';
+	name[5] = 'a';
+	name[6] = 'c';
+	name[7] = 'e';
+	playlist_profile_index = create_enumerated_saved_game_file(
+		_saved_game_file_type_game_variant,
+		local_player_index,
+		name);
+
+	if (playlist_profile_index == NONE)
+		return NONE;
+	if (saved_game_file_open(&file, playlist_profile_index))
+	{
+		byte block[SAVED_GAME_FILE_BLOCK_SIZE] = {0};
+		struct game_variant variant = *build_game_variant_slayer_pro(&temporary);
+
+		csmemcpy(block, &variant, sizeof(struct game_variant));
+		SET_FLAG(
+			((struct game_variant *)block)->flags,
+			_game_variant_is_system_default_bit,
+			FALSE);
+		game_engine_variant_cleanup((struct game_variant *)block);
+		ustrncpy(
+			(wchar_t *)block,
+			name,
+			MAXIMUM_GAME_VARIANT_NAME_LENGTH - 1);
+		((struct game_variant *)block)->human_readable_game_description[
+			MAXIMUM_GAME_VARIANT_NAME_LENGTH - 1] = 0;
+		saved_game_file_generate_checksum(
+			block,
+			PLAYLIST_PROFILE_CHECKSUM_DATA_SIZE,
+			(XCALCSIG_SIGNATURE *)(block + PLAYLIST_PROFILE_CHECKSUM_DATA_SIZE));
+
+		if (!file_set_position(&file, 0) ||
+			!file_write(&file, sizeof(block), block))
+		{
+			error(_error_silent, "failed to initialize the Gun Race gametype");
+			delete_enumerated_saved_game_file(playlist_profile_index);
+			playlist_profile_index = NONE;
+		}
+
+		saved_game_file_close(&file, playlist_profile_index);
+	}
+	else
+	{
+		error(_error_silent, "failed to open the Gun Race gametype");
+		delete_enumerated_saved_game_file(playlist_profile_index);
+		playlist_profile_index = NONE;
+	}
+
+	return playlist_profile_index;
+}
+
+static void playlist_profile_ensure_gun_race(short local_player_index)
+{
+	long indices[100];
+	word count;
+	word index;
+
+	if (local_player_index < 0)
+		return;
+	count = 100;
+	saved_game_files_enumerate_available_to_local_player_index(
+		local_player_index,
+		_saved_game_file_type_game_variant,
+		&count,
+		indices,
+		TRUE);
+	for (index = 0; index < count; index++)
+	{
+		if (playlist_profile_name_is_gun_race(
+			saved_game_file_get_display_name(indices[index])))
+			return;
+	}
+	playlist_profile_create_gun_race(local_player_index);
+}
+
 void playlist_profiles_enumerate_available_to_local_player_index(
 	short local_player_index,
 	word *number_of_profiles,
@@ -296,6 +401,7 @@ void playlist_profiles_enumerate_available_to_local_player_index(
 		playlist_profile_default_data.first_time = FALSE;
 	}
 
+	playlist_profile_ensure_gun_race(local_player_index);
 	saved_game_files_enumerate_available_to_local_player_index(
 		local_player_index,
 		_saved_game_file_type_game_variant,

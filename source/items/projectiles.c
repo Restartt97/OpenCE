@@ -141,6 +141,7 @@ symbols in this file:
 #include "sound/sound_definitions.h"
 #include "units/bipeds.h"
 #include "units/units.h"
+#include "gun_race.h" /* port: port/linux/game/gun_race.c */
 
 /* ---------- constants */
 
@@ -1235,6 +1236,11 @@ static void projectile_effect_new(
 	real scale,
 	real material_effect_scale)
 {
+	struct projectile_datum *projectile;
+
+	/* port: Gun Race Pro credits effects spawned by this impact */
+	projectile = projectile_get(projectile_index);
+	gun_race_push_pending_projectile(projectile->definition_index);
 	if (collision->type == _collision_result_object)
 	{
 		effect_new_attached_from_markers(
@@ -1268,6 +1274,7 @@ static void projectile_effect_new(
 			TRUE);
 	}
 
+	gun_race_pop_pending_projectile();
 	return;
 }
 
@@ -1349,6 +1356,8 @@ static void projectile_detonate(
 
 	projectile = projectile_get(projectile_index);
 	definition = projectile_definition_get(projectile->definition_index);
+	/* port: Gun Race Pro credits damage from this projectile's explosion */
+	gun_race_push_pending_projectile(projectile->definition_index);
 
 	marker_names[0] = "";
 	marker_names[1] = "gravity";
@@ -1459,7 +1468,10 @@ static void projectile_detonate(
 		damage.owner_object_index = projectile->object.owner_object_index;
 		damage.owner_player_index = projectile->object.owner_player_index;
 		damage.owner_team_index = projectile->object.owner_team_index;
+		/* port: Gun Race Pro attributes this hit to the projectile */
+		gun_race_begin_projectile(projectile->definition_index);
 		object_cause_damage(&damage, projectile->object.parent_object_index, NONE, NONE, NONE, NULL);
+		gun_race_end_damage();
 	}
 
 	if (projectile->projectile.hit_material_type != NONE)
@@ -1495,6 +1507,7 @@ static void projectile_detonate(
 		definition->projectile.detonation_noise,
 		1);
 
+	gun_race_pop_pending_projectile();
 	return;
 }
 
@@ -1562,6 +1575,8 @@ static void projectile_collision(
 		damage.origin = collision->point;
 		damage.direction = *new_velocity;
 		normalize3d(&damage.direction);
+		/* port: Gun Race Pro attributes this hit to the projectile */
+		gun_race_begin_projectile(projectile->definition_index);
 		object_cause_damage(
 			&damage,
 			collision->object_index,
@@ -1569,6 +1584,7 @@ static void projectile_collision(
 			collision->region_index,
 			collision->material_index,
 			&collision->plane.n);
+		gun_race_end_damage();
 
 		if (damage.material_type != NONE)
 			material_type = damage.material_type;

@@ -637,6 +637,10 @@ void game_engine_load_stage(
 void game_engine_end_game(
 	void);
 
+/* port: Gun Race Pro (port/linux/game/gun_race.c). Map grenades are not placed. */
+void game_engine_suppress_grenade_set(
+	void);
+
 void ticks_to_unicode_time_string(
 	long ticks,
 	unsigned long character_count,

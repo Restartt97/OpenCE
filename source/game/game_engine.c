@@ -593,6 +593,7 @@ struct network_game *network_game_server_get_game(struct network_game_server *se
 #include "units/bipeds.h"
 #include "units/units.h"
 #include "custom_edition_cache.h" /* port: port/linux/game/custom_edition_cache.c */
+#include "gun_race.h" /* port: port/linux/game/gun_race.c */
 
 /* network_game_globals.c's */
 boolean network_game_distributed_client(void);
@@ -7050,6 +7051,13 @@ struct game_variant *game_engine_get_variant(
 	return &global_variant;
 }
 
+/* port: Gun Race Pro. _game_engine_weapons_no_grenades only remaps grenades. */
+void game_engine_suppress_grenade_set(
+	void)
+{
+	global_variant.universal_variant.weapon_set = _game_engine_weapons_no_grenades;
+}
+
 struct game_variant *game_engine_get_variant_by_name(
 	struct game_variant *variant,
 	char const *name)
@@ -9180,6 +9188,9 @@ void game_engine_postspawn_player_update(
 				(char)starting_plasma_grenade_count;
 		}
 	}
+
+	/* port: Gun Race Pro replaces the spawn loadout and clears grenades */
+	gun_race_on_player_spawn(player_index);
 
 	return;
 }

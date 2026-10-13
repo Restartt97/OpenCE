@@ -108,6 +108,7 @@ symbols in this file:
 #include "units/unit_definitions.h"
 #include "units/units.h"
 #include "units/vehicles.h"
+#include "gun_race.h"
 
 /* ---------- constants */
 
@@ -848,6 +849,10 @@ static char blip_type_get(
 	if (controlling_local_player_index == local_player_index)
 		return _blip_type_self;
 
+	/* port: Gun Race Pro. The last weapon pulses on the radar. */
+	if (gun_race_mark_on_radar(object_index))
+		return _blip_type_custom;
+
 	if (!unit_try_and_get(object_index))
 		return _blip_type_enemy;
 
@@ -1017,6 +1022,10 @@ static boolean should_draw_object(
 		game_engine_draw_object_in_motion_sensor(object_index))
 	{
 		struct unit_datum *unit = unit_get(object_index);
+
+		/* port: Gun Race Pro. A player on the last weapon stays marked. */
+		if (gun_race_mark_on_radar(object_index))
+			return TRUE;
 
 		if (TEST_FLAG(
 			unit->unit.control_flags,
